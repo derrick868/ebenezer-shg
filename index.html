@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4A154B">
+    <meta name="description" content="Ebenezer Self Help Group: merry-go-round, savings, low-interest loans and event support.">
+    <title>Ebenezer Self Help Group</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/styles.css" rel="stylesheet">
+</head>
+<body>
+
+    <div class="demo-banner" id="demoBanner" hidden>
+        Demo mode: data is saved in this browser only. Add your Supabase keys in <code>js/config.js</code> to share data across members.
+    </div>
+
+    <nav class="site-nav" aria-label="Main">
+        <div class="logo"><i class="fas fa-hand-holding-heart"></i> EBENEZER SHG</div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Menu"><i class="fas fa-bars"></i></button>
+        <ul class="nav-links" id="navLinks">
+            <li><a href="#services">Services</a></li>
+            <li><a href="#register">Register</a></li>
+            <li><a href="#reports">Member Reports</a></li>
+            <li><button class="nav-btn" id="signInBtn" hidden>Officials sign in</button></li>
+            <li><button class="nav-btn" id="signOutBtn" hidden>Sign out</button></li>
+        </ul>
+    </nav>
+
+    <section class="hero">
+        <h1>Ebenezer Self Help Group</h1>
+        <div class="slogan">"Together We Rise"</div>
+        <p>Select any service below to open its module or manage your contributions.</p>
+    </section>
+
+    <div class="container">
+
+        <h2 class="section-title" id="services">Group Services (Click to Open)</h2>
+        <ul class="services-list">
+            <li>
+                <button class="service-btn-card" data-panel="merryGoRoundPanel">
+                    <div>
+                        <div class="service-btn-header"><i class="fas fa-sync-alt"></i><h3>Daily Merry-Go-Round</h3></div>
+                        <p>Track turn sequences and payments at KES 100/day per member.</p>
+                    </div>
+                    <span class="btn-action-label">View Rotation Schedule <i class="fas fa-arrow-right"></i></span>
+                </button>
+            </li>
+            <li>
+                <button class="service-btn-card" data-panel="savingsPanel">
+                    <div>
+                        <div class="service-btn-header"><i class="fas fa-piggy-bank"></i><h3>Savings &amp; Investments</h3></div>
+                        <p>View personal savings totals and group investment growth.</p>
+                    </div>
+                    <span class="btn-action-label">Manage Savings <i class="fas fa-arrow-right"></i></span>
+                </button>
+            </li>
+            <li>
+                <button class="service-btn-card" data-panel="loansPanel">
+                    <div>
+                        <div class="service-btn-header"><i class="fas fa-hand-holding-usd"></i><h3>Low-Interest Loans</h3></div>
+                        <p>Calculate repayments at a 10% interest rate per term.</p>
+                    </div>
+                    <span class="btn-action-label">Apply / Calculate Loan <i class="fas fa-arrow-right"></i></span>
+                </button>
+            </li>
+            <li>
+                <button class="service-btn-card" data-panel="eventsPanel">
+                    <div>
+                        <div class="service-btn-header"><i class="fas fa-heart"></i><h3>Event Support</h3></div>
+                        <p>Request welfare funds for weddings, medical bills, or bereavement.</p>
+                    </div>
+                    <span class="btn-action-label">Request Event Support <i class="fas fa-arrow-right"></i></span>
+                </button>
+            </li>
+        </ul>
+
+        <!-- Merry-go-round -->
+        <div id="merryGoRoundPanel" class="action-panel active">
+            <h3 class="section-title"><i class="fas fa-sync-alt"></i> Daily Merry-Go-Round Schedule</h3>
+            <p class="lock-note">Officials sign in to see the rotation. <button type="button" data-open-signin>Sign in</button></p>
+            <div class="admin-only">
+                <div class="stat-row">
+                    <p><strong>Daily Member Rate:</strong> <span id="mgrRate"></span></p>
+                    <p><strong>Today's Recipient:</strong> <span id="mgrToday"></span></p>
+                    <p><strong>Tomorrow's Recipient:</strong> <span id="mgrTomorrow"></span></p>
+                </div>
+                <div class="table-scroll" id="mgrRotation"></div>
+            </div>
+        </div>
+
+        <!-- Savings -->
+        <div id="savingsPanel" class="action-panel">
+            <h3 class="section-title"><i class="fas fa-piggy-bank"></i> Savings &amp; Growth Tracker</h3>
+            <p>Regular contributions build up your borrowing power and annual dividends.</p>
+            <p class="lock-note">Officials sign in to record deposits. <button type="button" data-open-signin>Sign in</button></p>
+            <div class="admin-only">
+                <div class="stat-row"><p><strong>Group savings total:</strong> <span id="savingsTotal"></span></p></div>
+                <form id="savingsForm" style="max-width: 400px;">
+                    <select class="member-select" name="member" required aria-label="Member"></select>
+                    <input type="number" name="amount" min="1" step="any" placeholder="Deposit Amount (KES)" required>
+                    <button type="submit" class="action-btn">Make Savings Deposit</button>
+                </form>
+                <div class="table-scroll" id="savingsRecent"></div>
+            </div>
+        </div>
+
+        <!-- Loans -->
+        <div id="loansPanel" class="action-panel">
+            <h3 class="section-title"><i class="fas fa-hand-holding-usd"></i> Loan Calculator (10% Interest Rate)</h3>
+            <form id="loanForm" style="max-width: 400px;">
+                <select class="member-select admin-only" name="member" aria-label="Member"></select>
+                <input type="number" name="amount" min="1" step="any" placeholder="Loan Amount (KES)" required>
+                <select name="months">
+                    <option value="1">1 Month (10% Interest)</option>
+                    <option value="3">3 Months (10% Interest)</option>
+                    <option value="6">6 Months (10% Interest)</option>
+                </select>
+                <button type="submit" class="action-btn">Calculate Repayment</button>
+                <button type="button" class="action-btn secondary admin-only" id="loanRecordBtn">Record loan request for this member</button>
+            </form>
+            <div id="calcResult" style="margin-top: 1rem; font-weight: bold; color: var(--primary-purple);" aria-live="polite"></div>
+            <p class="lock-note">Officials sign in to record and approve loans. <button type="button" data-open-signin>Sign in</button></p>
+            <div class="admin-only table-scroll" id="loansList"></div>
+        </div>
+
+        <!-- Event support -->
+        <div id="eventsPanel" class="action-panel">
+            <h3 class="section-title"><i class="fas fa-heart"></i> Event Support Claim</h3>
+            <p class="lock-note">Officials sign in to record and review claims. <button type="button" data-open-signin>Sign in</button></p>
+            <div class="admin-only">
+                <form id="eventForm" style="max-width: 400px;">
+                    <select class="member-select" name="member" required aria-label="Member"></select>
+                    <select name="kind" required>
+                        <option value="">Select Event Type</option>
+                        <option value="wedding">Wedding / Celebration</option>
+                        <option value="medical">Medical Emergency</option>
+                        <option value="bereavement">Bereavement Support</option>
+                    </select>
+                    <textarea name="description" placeholder="Describe the support required..." rows="3" required></textarea>
+                    <button type="submit" class="action-btn">Submit Request</button>
+                </form>
+                <div class="table-scroll" id="eventsList"></div>
+            </div>
+        </div>
+
+        <!-- Registration & reports -->
+        <div class="grid-two-col">
+            <div class="panel-box" id="register">
+                <h2 class="section-title"><i class="fas fa-user-plus"></i> New Member Registration</h2>
+                <form id="regForm">
+                    <input type="text" name="full_name" placeholder="Full Name" autocomplete="name" required>
+                    <input type="email" name="email" placeholder="Email Address" autocomplete="email" required>
+                    <input type="tel" name="phone" placeholder="Phone Number" autocomplete="tel" required>
+                    <select name="plan">
+                        <option value="Daily Merry-Go-Round">Daily Merry-Go-Round (KES 100/day)</option>
+                        <option value="Monthly Savings">Monthly Savings Only</option>
+                        <option value="Full Membership">Full Membership (All Services)</option>
+                    </select>
+                    <button type="submit" class="action-btn">Register Member</button>
+                </form>
+                <div id="regAlert" style="margin-top: 0.8rem; font-weight: bold; color: green;" aria-live="polite"></div>
+            </div>
+
+            <div class="panel-box" id="reports">
+                <h2 class="section-title"><i class="fas fa-chart-line"></i> Member Reports</h2>
+                <p class="lock-note">Member reports are for group officials. <button type="button" data-open-signin>Sign in</button></p>
+                <div class="admin-only">
+                    <label for="reportFilter" style="font-size: 0.85rem; font-weight: bold;">Filter Report Status:</label>
+                    <select id="reportFilter">
+                        <option value="all">All Members</option>
+                        <option value="active">Active Merry-Go-Round</option>
+                        <option value="loans">Active Loans</option>
+                    </select>
+                    <div class="table-scroll">
+                        <table class="report-table">
+                            <thead><tr><th>Member</th><th>Savings</th><th>Status</th></tr></thead>
+                            <tbody id="reportData"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Ebenezer Self Help Group.</p>
+        <p><small><strong>Together We Rise</strong></small></p>
+    </footer>
+
+    <dialog id="signInDialog" aria-labelledby="signInTitle">
+        <form id="signInForm" method="dialog">
+            <h3 id="signInTitle" style="color: var(--primary-purple);">Officials sign in</h3>
+            <input type="email" name="email" placeholder="Email" autocomplete="username" required>
+            <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
+            <div class="form-error" id="signInError" role="alert"></div>
+            <div class="dialog-actions">
+                <button type="button" class="action-btn secondary" id="signInCancel">Cancel</button>
+                <button type="submit" class="action-btn">Sign in</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
