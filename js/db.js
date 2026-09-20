@@ -84,7 +84,7 @@ async function supabaseAdapter() {
       async session() { return check(await sb.auth.getSession()).session; },
       async signIn(email, password) { check(await sb.auth.signInWithPassword({ email, password })); },
       async signOut() { await sb.auth.signOut(); },
-      onChange(cb) { sb.auth.onAuthStateChange((_event, session) => cb(session)); },
+      onChange(cb) {   sb.auth.onAuthStateChange((event, session) => {     if (event === 'INITIAL_SESSION') return;     setTimeout(() => cb(session), 0);   }); },
     },
     async list(table) { return check(await sb.from(table).select('*').order('created_at', { ascending: false })); },
     async insert(table, row) { check(await sb.from(table).insert(row)); },
