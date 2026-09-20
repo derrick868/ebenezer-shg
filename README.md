@@ -11,12 +11,27 @@ not shared between devices.
 
 ## Go live with shared data (Supabase)
 1. Create a free project at supabase.com.
-2. SQL Editor > paste `supabase/schema.sql` > Run.
-3. Authentication > Providers > Email: turn **off** "Allow new users to sign up".
-   Then Authentication > Users > Add user, for each official (chair, treasurer, secretary).
-   Anyone who can sign in can read and edit all records, so keep this list to officials only.
-4. Project Settings > API: copy the Project URL and the `anon` key into `js/config.js`.
-5. Redeploy.
+2. SQL Editor: run `supabase/schema.sql`, then `supabase/migrate-v2.sql` (member logins and roles).
+3. Authentication > Sign In / Providers > Email: turn **on** "Allow new users to sign up" and turn **off** "Confirm email".
+   Anyone can create an account, but an account sees nothing until it is linked to an approved member (see below).
+4. Create your own login: Authentication > Users > Add user (tick Auto Confirm). Then edit and run
+   `supabase/make-official.sql` in the SQL Editor to make that user the chair. Repeat for the treasurer and secretary.
+   Do this straight after step 2, because existing logins lose access until they are made officials.
+5. Project Settings > API: copy the Project URL and the `anon` key into `js/config.js`.
+6. Redeploy.
+
+## How members get in
+1. A visitor fills in the registration form on the site (status: pending).
+2. An official approves them under Member Reports.
+3. The report now shows a one-time membership code with a **Copy invite** button. Send the message to the member (WhatsApp, SMS).
+4. The member opens the site, taps Sign in > Create an account (any email and password), and enters the code.
+   Their account is now linked. They see only their own savings, loans and requests, plus the merry-go-round schedule and group total.
+
+Officials see and manage everything. Members can send loan and event-support requests; officials approve them.
+Roles (chair, treasurer, secretary) are set in SQL with `make-official.sql`. All three have the same rights for now.
+
+## Try the member view in demo mode
+Open the site with `?as=member` at the end of the address (for example `index.html?as=member`).
 
 ## Deploy to Netlify
 - Quick: app.netlify.com/drop, drag this folder in.
