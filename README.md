@@ -11,7 +11,7 @@ not shared between devices.
 
 ## Go live with shared data (Supabase)
 1. Create a free project at supabase.com.
-2. SQL Editor: run `supabase/schema.sql`, then `supabase/migrate-v2.sql` (member logins and roles).
+2. SQL Editor: run `supabase/schema.sql`, then `supabase/migrate-v2.sql` (member logins and roles), then `supabase/migrate-v3.sql` (payment tracking).
 3. Authentication > Sign In / Providers > Email: turn **on** "Allow new users to sign up" and turn **off** "Confirm email".
    Anyone can create an account, but an account sees nothing until it is linked to an approved member (see below).
 4. Create your own login: Authentication > Users > Add user (tick Auto Confirm). Then edit and run
@@ -29,6 +29,14 @@ not shared between devices.
 
 Officials see and manage everything. Members can send loan and event-support requests; officials approve them.
 Roles (chair, treasurer, secretary) are set in SQL with `make-official.sql`. All three have the same rights for now.
+
+## Payment tracking
+- **Daily contributions:** Services > Daily Merry-Go-Round > Daily contributions. Pick a date (default today), tap **Mark paid** or **Undo** per member.
+  A member's unpaid days count full days from approval (or `MGR_START`) up to yesterday.
+- **Loan repayments:** Services > Low-Interest Loans > **Record payment** on an active loan. Payments cannot exceed the balance,
+  a fully paid loan closes itself, and deleting a wrong payment reopens it.
+- **Statements:** **Statement** button per member in Member Reports, and **My statement** on the member dashboard. Use Print / Save as PDF.
+- Members see their own balances, unpaid days and contribution history.
 
 ## Try the member view in demo mode
 Open the site with `?as=member` at the end of the address (for example `index.html?as=member`).
