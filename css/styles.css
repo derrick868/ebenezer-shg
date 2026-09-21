@@ -350,7 +350,8 @@ button.action-btn:disabled { opacity: 0.6; cursor: wait; }
 .badge-danger { background: #FEE2E2; color: #991B1B; }
 
 dialog#signInDialog,
-dialog#claimDialog {
+dialog#claimDialog,
+dialog#paymentDialog {
     border: none;
     border-radius: 12px;
     padding: 1.5rem;
@@ -359,7 +360,9 @@ dialog#claimDialog {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
 }
 dialog#signInDialog::backdrop,
-dialog#claimDialog::backdrop { background: rgba(45, 42, 46, 0.55); }
+dialog#claimDialog::backdrop,
+dialog#paymentDialog::backdrop,
+dialog#statementDialog::backdrop { background: rgba(45, 42, 46, 0.55); }
 .dialog-actions { display: flex; gap: 0.6rem; justify-content: flex-end; }
 .form-error { color: #991B1B; font-size: 0.85rem; min-height: 1.2em; }
 
@@ -436,3 +439,37 @@ body.member .hide-for-member { display: none !important; }
 .member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 3rem; }
 .role-tag { font-size: 0.7rem; background: var(--light-purple); color: var(--primary-purple); padding: 0.1rem 0.5rem; border-radius: 999px; margin-left: 0.3rem; }
 code { background: var(--light-purple); padding: 0.05rem 0.4rem; border-radius: 4px; }
+
+/* ---------- Payment tracking + statements ---------- */
+.subhead { color: var(--primary-purple); margin: 1.5rem 0 0.5rem; }
+.inline-input { width: auto; margin: 0 0 0 0.4rem; padding: 0.4rem 0.6rem; }
+.report-table td small { color: var(--text-muted); }
+.owing { color: #991B1B; font-weight: 600; }
+
+dialog#statementDialog {
+    border: none;
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: min(94vw, 760px);
+    max-height: 90vh;
+    margin: auto;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.statement h2 { color: var(--primary-purple); margin-bottom: 0.2rem; }
+.statement h4 { color: var(--primary-purple); margin: 1.2rem 0 0.3rem; }
+.statement .meta { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem; }
+.statement .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; margin: 1rem 0; }
+.statement .summary div { background: var(--light-purple); border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.8rem; color: var(--text-muted); }
+.statement .summary strong { display: block; font-size: 1.05rem; color: var(--primary-purple); }
+
+@media print {
+    body > *:not(#statementDialog) { display: none !important; }
+    dialog#statementDialog {
+        position: static !important;
+        width: 100%;
+        max-height: none;
+        box-shadow: none;
+        padding: 0;
+    }
+    .no-print { display: none !important; }
+}
