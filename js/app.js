@@ -9,6 +9,13 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-KE', { weekday: 'short', day: 'numeric', month: 'short' });
 const fmtDay = (d) => new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' });
 
+const pad2 = (n) => String(n).padStart(2, '0');
+const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; // local calendar day
+const todayStr = () => ymd(new Date());
+const dayShift = (str, n) => { const [y, m, d] = str.split('-').map(Number); return ymd(new Date(y, m - 1, d + n)); };
+const daysBetween = (a, b) => Math.round((Date.UTC(...b.split('-').map((x, i) => (i === 1 ? x - 1 : +x))) - Date.UTC(...a.split('-').map((x, i) => (i === 1 ? x - 1 : +x)))) / 864e5);
+const fmtYmd = (str) => fmtDay(new Date(str + 'T12:00:00'));
+
 const MGR_PLANS = ['Daily Merry-Go-Round', 'Full Membership'];
 const OFFICIAL_ROLES = ['chair', 'treasurer', 'secretary'];
 const ROLE_LABEL = { chair: 'Chair', treasurer: 'Treasurer', secretary: 'Secretary' };
@@ -16,7 +23,7 @@ const EVENT_LABELS = { wedding: 'Wedding / Celebration', medical: 'Medical Emerg
 const STATUS_BADGE = { pending: 'badge-pending', active: 'badge-success', approved: 'badge-success', repaid: 'badge-muted', rejected: 'badge-danger', declined: 'badge-danger' };
 
 let db;
-const state = { profile: null, members: [], savings: [], loans: [], events: [], rotation: [], groupTotal: null };
+const state = { profile: null, members: [], savings: [], loans: [], events: [], loanPayments: [], mgrPayments: [], rotation: [], groupTotal: null };
 let promptedLink = false;
 
 let toastTimer;
@@ -30,7 +37,7 @@ function toast(message, isError = false) {
 }
 
 function errorText(e) {
-  if (e?.code === '23505') return 'That email is already registered.';
+  if (e?.code === '23505') return /email/i.test(e.message) ? 'That email is already registered.' : 'That entry already exists.';
   if (e?.code === '42501') return 'You do not have permission to do that. Sign in as an official and try again.';
   return e?.message || 'Something went wrong. Try again.';
 }
@@ -52,6 +59,20 @@ const memberName = (id) => state.members.find((m) => m.id === id)?.full_name ?? 
 const activeMembers = () => state.members.filter((m) => m.status === 'active');
 const sumAmounts = (rows) => rows.reduce((t, r) => t + Number(r.amount), 0);
 const savingsOf = (id) => sumAmounts(state.savings.filter((s) => s.member_id === id));
+const loanPaid = (loanId) => sumAmounts(state.loanPayments.filter((p) => p.loan_id === loanId));
+const loanBalance = (l) => Math.max(0, Number(l.total_payable) - loanPaid(l.id));
+
+// Merry-go-round days a member has not paid, counting full days from approval (or MGR_START) up to yesterday.
+function arrearsDays(m) {
+  if (m.status !== 'active' || !MGR_PLANS.includes(m.plan)) return 0;
+  const approved = ymd(new Date(m.approved_at || m.created_at));
+  const from = approved > CONFIG.MGR_START ? approved : CONFIG.MGR_START;
+  const last = dayShift(todayStr(), -1);
+  if (from > last) return 0;
+  const paid = new Set(state.mgrPayments.filter((p) => p.member_id === m.id && p.pay_date >= from && p.pay_date <= last).map((p) => p.pay_date));
+  return Math.max(0, daysBetween(from, last) + 1 - paid.size);
+}
+const arrearsText = (m) => { const d = arrearsDays(m); return d ? `${d} day${d > 1 ? 's' : ''} (${kes(d * CONFIG.DAILY_RATE)})` : 'None'; };
 const fmtCode = (c) => (c || '').replace(/(.{4})(?=.)/g, '$1-');
 const hasActiveLoan = (id) => state.loans.some((l) => l.member_id === id && l.status === 'active');
 
@@ -64,7 +85,7 @@ async function refresh() {
   ['official', 'member', 'linking'].forEach((c) => document.body.classList.remove(c));
   $('#linkBanner').hidden = true;
   if (!signedIn) {
-    Object.assign(state, { profile: null, members: [], savings: [], loans: [], events: [], rotation: [], groupTotal: null });
+    Object.assign(state, { profile: null, members: [], savings: [], loans: [], events: [], loanPayments: [], mgrPayments: [], rotation: [], groupTotal: null });
     return;
   }
 
@@ -82,13 +103,13 @@ async function refresh() {
     document.body.classList.add(official ? 'official' : 'member');
 
     if (official) {
-      [state.members, state.savings, state.loans, state.events] = await Promise.all(
-        ['members', 'savings', 'loans', 'event_requests'].map((t) => db.list(t))
+      [state.members, state.savings, state.loans, state.events, state.loanPayments, state.mgrPayments] = await Promise.all(
+        ['members', 'savings', 'loans', 'event_requests', 'loan_payments', 'mgr_payments'].map((t) => db.list(t))
       );
     } else {
       // Members only receive their own rows (enforced by the database) plus two safe summaries.
-      [state.savings, state.loans, state.events, state.rotation, state.groupTotal] = await Promise.all([
-        db.list('savings'), db.list('loans'), db.list('event_requests'),
+      [state.savings, state.loans, state.events, state.loanPayments, state.mgrPayments, state.rotation, state.groupTotal] = await Promise.all([
+        db.list('savings'), db.list('loans'), db.list('event_requests'), db.list('loan_payments'), db.list('mgr_payments'),
         db.rpc('rotation_members'), db.rpc('group_savings_total'),
       ]);
       state.members = [state.profile];
@@ -105,6 +126,7 @@ function render() {
   if (document.body.classList.contains('official')) {
     renderMemberSelects();
     renderRotation();
+    renderContributions();
     renderSavings();
     renderLoans();
     renderEvents();
@@ -173,6 +195,28 @@ function renderRotation() {
   $('#mgrRotation').innerHTML = scheduleTable(info);
 }
 
+function renderContributions() {
+  const input = $('#mgrDate');
+  if (!input.value) input.value = todayStr();
+  input.max = todayStr();
+  const date = input.value;
+  const members = state.members
+    .filter((m) => m.status === 'active' && MGR_PLANS.includes(m.plan))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  const paid = new Map(state.mgrPayments.filter((p) => p.pay_date === date).map((p) => [p.member_id, p]));
+
+  $('#mgrCollected').textContent = `${kes(paid.size * CONFIG.DAILY_RATE)} of ${kes(members.length * CONFIG.DAILY_RATE)}`;
+  const rows = members.map((m) => {
+    const payment = paid.get(m.id);
+    const action = payment
+      ? `<button type="button" class="btn-sm danger" data-mgr-undo="${esc(payment.id)}">Undo</button>`
+      : `<button type="button" class="btn-sm" data-mgr-pay="${esc(m.id)}">Mark paid</button>`;
+    const owes = arrearsDays(m);
+    return `<tr><td>${esc(m.full_name)}${owes ? `<br><small class="owing">Owes ${arrearsText(m)}</small>` : ''}</td><td>${payment ? badge('active', 'Paid') : badge('pending', 'Not paid')}</td><td>${action}</td></tr>`;
+  });
+  $('#mgrContrib').innerHTML = table(['Member', 'Status', ''], rows, 'No members in the rotation yet.');
+}
+
 function renderMember() {
   const p = state.profile;
   $('#myName').textContent = p.full_name;
@@ -196,10 +240,18 @@ function renderMember() {
     }
   }
 
+  if (inRotation) {
+    $('#myArrears').textContent = arrearsText(p);
+    $('#myArrears').classList.toggle('owing', arrearsDays(p) > 0);
+    $('#myPayments').innerHTML = table(['Recent contributions', 'Amount'],
+      [...state.mgrPayments].sort((a, b) => b.pay_date.localeCompare(a.pay_date)).slice(0, 7)
+        .map((x) => `<tr><td>${fmtYmd(x.pay_date)}</td><td>${kes(x.amount)}</td></tr>`), 'No contributions recorded yet.');
+  }
+
   $('#myDeposits').innerHTML = table(['Amount', 'Date'],
     state.savings.map((s) => `<tr><td>${kes(s.amount)}</td><td>${fmtDay(s.created_at)}</td></tr>`), 'No deposits recorded yet.');
-  $('#myLoans').innerHTML = table(['Amount', 'Term', 'Payable', 'Status'],
-    state.loans.map((l) => `<tr><td>${kes(l.principal)}</td><td>${l.months} mo</td><td>${kes(l.total_payable)}</td><td>${badge(l.status)}</td></tr>`), 'No loans yet.');
+  $('#myLoans').innerHTML = table(['Amount', 'Payable', 'Balance', 'Status'],
+    state.loans.map((l) => `<tr><td>${kes(l.principal)}<br><small>${l.months} mo</small></td><td>${kes(l.total_payable)}</td><td>${l.status === 'active' ? kes(loanBalance(l)) : '-'}</td><td>${badge(l.status)}</td></tr>`), 'No loans yet.');
   $('#myEvents').innerHTML = table(['Request', 'Status'],
     state.events.map((ev) => `<tr><td>${esc(EVENT_LABELS[ev.kind] || ev.kind)}<br><small>${esc(ev.description)}</small></td><td>${badge(ev.status)}</td></tr>`), 'No support requests yet.');
 }
@@ -216,10 +268,11 @@ function renderLoans() {
   const rows = state.loans.map((l) => {
     let actions = '';
     if (l.status === 'pending') actions = actionBtn('loans', l.id, 'active', 'Approve') + actionBtn('loans', l.id, 'rejected', 'Reject', true);
-    if (l.status === 'active') actions = actionBtn('loans', l.id, 'repaid', 'Mark repaid');
-    return `<tr><td>${esc(memberName(l.member_id))}</td><td>${kes(l.principal)}</td><td>${l.months} mo</td><td>${kes(l.total_payable)}</td><td>${badge(l.status)}</td><td><div class="row-actions">${actions}</div></td></tr>`;
+    if (l.status === 'active') actions = `<button type="button" class="btn-sm" data-pay-loan="${esc(l.id)}">Record payment</button>`;
+    const balance = l.status === 'active' ? kes(loanBalance(l)) : l.status === 'repaid' ? kes(0) : '-';
+    return `<tr><td>${esc(memberName(l.member_id))}</td><td>${kes(l.principal)}<br><small>${l.months} mo</small></td><td>${kes(l.total_payable)}</td><td>${balance}</td><td>${badge(l.status)}</td><td><div class="row-actions">${actions}</div></td></tr>`;
   });
-  $('#loansList').innerHTML = table(['Member', 'Amount', 'Term', 'Payable', 'Status', ''], rows, 'No loans recorded yet.');
+  $('#loansList').innerHTML = table(['Member', 'Amount', 'Payable', 'Balance', 'Status', ''], rows, 'No loans recorded yet.');
 }
 
 function renderEvents() {
@@ -254,9 +307,48 @@ function renderReports() {
         else if (m.status === 'active' && m.claim_code) {
           account = `<br><small>Code <code>${esc(fmtCode(m.claim_code))}</code></small> <button type="button" class="btn-sm" data-copy-invite data-id="${esc(m.id)}">Copy invite</button>`;
         }
-        return `<tr><td>${esc(m.full_name)}${role}<br><small>${esc(m.plan)}</small></td><td>${kes(savingsOf(m.id))}</td><td>${status}${account}</td></tr>`;
+        const owes = arrearsDays(m);
+        const owing = owes ? `<br><small class="owing">Owes ${arrearsText(m)}</small>` : '';
+        const statement = m.status === 'active' ? `<br><button type="button" class="btn-sm" data-statement="${esc(m.id)}">Statement</button>` : '';
+        return `<tr><td>${esc(m.full_name)}${role}<br><small>${esc(m.plan)}</small></td><td>${kes(savingsOf(m.id))}</td><td>${status}${owing}${account}${statement}</td></tr>`;
       }).join('')
     : '<tr><td colspan="3" class="empty">No members match this filter.</td></tr>';
+}
+
+/* ---------- statements ---------- */
+function statementHtml(m) {
+  const mine = (rows) => rows.filter((r) => r.member_id === m.id);
+  const savings = mine(state.savings);
+  const loans = mine(state.loans);
+  const loanPays = mine(state.loanPayments);
+  const contributions = mine(state.mgrPayments).sort((a, b) => b.pay_date.localeCompare(a.pay_date));
+  const owing = loans.filter((l) => l.status === 'active').reduce((t, l) => t + loanBalance(l), 0);
+  const inRotation = MGR_PLANS.includes(m.plan);
+  const loanOf = (id) => loans.find((l) => l.id === id);
+
+  return `<div class="statement">
+    <h2 id="statementTitle">Ebenezer Self Help Group</h2>
+    <div class="meta">Member statement for <strong>${esc(m.full_name)}</strong> (${esc(m.plan)}) &middot; ${esc(m.email)}<br>Generated ${fmtDay(new Date())}</div>
+    <div class="summary">
+      <div>Total savings<strong>${kes(sumAmounts(savings))}</strong></div>
+      <div>Loan balance owed<strong>${kes(owing)}</strong></div>
+      ${inRotation ? `<div>Contributions paid<strong>${contributions.length} day${contributions.length === 1 ? '' : 's'}</strong></div><div>Unpaid days<strong>${arrearsText(m)}</strong></div>` : ''}
+    </div>
+    <h4>Savings deposits</h4>
+    ${table(['Date', 'Amount'], savings.map((s) => `<tr><td>${fmtDay(s.created_at)}</td><td>${kes(s.amount)}</td></tr>`), 'No deposits.')}
+    <h4>Loans</h4>
+    ${table(['Date', 'Amount', 'Term', 'Payable', 'Balance', 'Status'], loans.map((l) =>
+      `<tr><td>${fmtDay(l.created_at)}</td><td>${kes(l.principal)}</td><td>${l.months} mo</td><td>${kes(l.total_payable)}</td><td>${l.status === 'active' ? kes(loanBalance(l)) : '-'}</td><td>${esc(l.status)}</td></tr>`), 'No loans.')}
+    <h4>Loan repayments</h4>
+    ${table(['Date', 'Loan', 'Amount'], [...loanPays].sort((a, b) => b.paid_on.localeCompare(a.paid_on)).map((p) =>
+      `<tr><td>${fmtYmd(p.paid_on)}</td><td>${loanOf(p.loan_id) ? kes(loanOf(p.loan_id).principal) : '-'}</td><td>${kes(p.amount)}</td></tr>`), 'No repayments.')}
+    ${inRotation ? `<h4>Merry-go-round contributions</h4>${table(['Date', 'Amount'], contributions.map((x) => `<tr><td>${fmtYmd(x.pay_date)}</td><td>${kes(x.amount)}</td></tr>`), 'No contributions.')}` : ''}
+  </div>`;
+}
+
+function openStatement(m) {
+  $('#statementBody').innerHTML = statementHtml(m);
+  $('#statementDialog').showModal();
 }
 
 /* ---------- loan maths ---------- */
@@ -473,6 +565,65 @@ function bindUI() {
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => toast('Invite message copied.'), () => window.prompt('Copy this message:', text));
     else window.prompt('Copy this message:', text);
   });
+
+  // Merry-go-round contributions (officials)
+  $('#mgrDate').addEventListener('change', renderContributions);
+  document.addEventListener('click', (e) => {
+    const pay = e.target.closest('button[data-mgr-pay]');
+    const undo = e.target.closest('button[data-mgr-undo]');
+    if (pay) {
+      guarded(pay, async () => {
+        await db.insert('mgr_payments', { member_id: pay.dataset.mgrPay, pay_date: $('#mgrDate').value, amount: CONFIG.DAILY_RATE });
+        await refresh();
+      });
+    } else if (undo) {
+      guarded(undo, async () => { await db.remove('mgr_payments', undo.dataset.mgrUndo); await refresh(); });
+    }
+  });
+
+  // Loan repayments (officials)
+  const payDialog = $('#paymentDialog');
+  let payLoan = null;
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-pay-loan]');
+    if (!btn) return;
+    payLoan = state.loans.find((l) => l.id === btn.dataset.payLoan);
+    if (!payLoan) return;
+    const form = $('#paymentForm');
+    $('#paymentInfo').textContent = `${memberName(payLoan.member_id)}: balance ${kes(loanBalance(payLoan))}`;
+    form.elements.amount.max = loanBalance(payLoan);
+    form.elements.amount.value = '';
+    form.elements.paid_on.value = todayStr();
+    form.elements.paid_on.max = todayStr();
+    payDialog.showModal();
+  });
+  $('#paymentCancel').addEventListener('click', () => payDialog.close());
+  $('#paymentForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    guarded($('button[type=submit]', form), async () => {
+      await db.insert('loan_payments', {
+        loan_id: payLoan.id,
+        member_id: payLoan.member_id,
+        amount: Number(form.elements.amount.value),
+        paid_on: form.elements.paid_on.value,
+      });
+      payDialog.close();
+      toast('Payment recorded.');
+      await refresh();
+    });
+  });
+
+  // Statements
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-statement]');
+    if (!btn) return;
+    const m = state.members.find((x) => x.id === btn.dataset.statement);
+    if (m) openStatement(m);
+  });
+  $('#myStatementBtn').addEventListener('click', () => openStatement(state.profile));
+  $('#statementClose').addEventListener('click', () => $('#statementDialog').close());
+  $('#statementPrint').addEventListener('click', () => window.print());
 
   // Reports filter
   $('#reportFilter').addEventListener('change', renderReports);
