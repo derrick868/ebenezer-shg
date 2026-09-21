@@ -45,6 +45,7 @@
         <!-- Member dashboard (signed-in members) -->
         <section id="myAccount" class="member-only">
             <h2 class="section-title"><i class="fas fa-user-circle"></i> Welcome, <span id="myName"></span></h2>
+            <button type="button" class="action-btn secondary" id="myStatementBtn" style="width: auto;"><i class="fas fa-print"></i> My statement</button>
 
             <div class="stat-cards">
                 <div class="stat-card"><span class="stat-value" id="mySavings"></span><span>My savings</span></div>
@@ -57,6 +58,8 @@
                     <h3 class="section-title"><i class="fas fa-sync-alt"></i> Merry-Go-Round</h3>
                     <p><strong>Today's recipient:</strong> <span id="myMgrToday"></span></p>
                     <div class="table-scroll" id="myMgrTable"></div>
+                    <p style="margin-top: 1rem;"><strong>Unpaid days:</strong> <span id="myArrears"></span></p>
+                    <div class="table-scroll" id="myPayments"></div>
                 </div>
 
                 <div class="panel-box">
@@ -156,6 +159,13 @@
                     <p><strong>Tomorrow's Recipient:</strong> <span id="mgrTomorrow"></span></p>
                 </div>
                 <div class="table-scroll" id="mgrRotation"></div>
+
+                <h4 class="subhead"><i class="fas fa-coins"></i> Daily contributions</h4>
+                <div class="stat-row">
+                    <p><label for="mgrDate"><strong>Date:</strong></label> <input type="date" id="mgrDate" class="inline-input"></p>
+                    <p><strong>Collected:</strong> <span id="mgrCollected"></span></p>
+                </div>
+                <div class="table-scroll" id="mgrContrib"></div>
             </div>
         </div>
 
@@ -272,6 +282,27 @@
             </div>
             <button type="button" class="link-btn" id="authToggle">New member? Create an account</button>
         </form>
+    </dialog>
+
+    <dialog id="paymentDialog" aria-labelledby="paymentTitle">
+        <form id="paymentForm" method="dialog">
+            <h3 id="paymentTitle" style="color: var(--primary-purple);">Record loan payment</h3>
+            <p class="dialog-help" id="paymentInfo"></p>
+            <input type="number" name="amount" min="1" step="any" placeholder="Amount paid (KES)" required>
+            <input type="date" name="paid_on" required>
+            <div class="dialog-actions">
+                <button type="button" class="action-btn secondary" id="paymentCancel">Cancel</button>
+                <button type="submit" class="action-btn">Save payment</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="statementDialog" aria-labelledby="statementTitle">
+        <div id="statementBody"></div>
+        <div class="dialog-actions no-print">
+            <button type="button" class="action-btn secondary" id="statementClose">Close</button>
+            <button type="button" class="action-btn" id="statementPrint"><i class="fas fa-print"></i> Print / Save as PDF</button>
+        </div>
     </dialog>
 
     <dialog id="claimDialog" aria-labelledby="claimTitle">
