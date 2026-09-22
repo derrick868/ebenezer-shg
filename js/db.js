@@ -151,8 +151,20 @@ function seed() {
 }
 
 /* ---------- Live mode: Supabase ---------- */
+// The Supabase client is self-hosted (vendor/supabase.js, v2.45.4) so the app shell works offline.
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error(`Could not load ${src}`));
+    document.head.appendChild(el);
+  });
+}
+
 async function supabaseAdapter() {
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
+  await loadScript('vendor/supabase.js');
+  const { createClient } = window.supabase;
   const sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
   const check = ({ error, data }) => {
     if (error) throw error;
