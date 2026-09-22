@@ -473,3 +473,29 @@ dialog#statementDialog {
     }
     .no-print { display: none !important; }
 }
+
+/* ---------- PWA banners ---------- */
+.offline-banner {
+    background: var(--text-dark);
+    color: var(--white);
+    text-align: center;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+}
+.ios-hint {
+    background: var(--light-purple);
+    color: var(--primary-purple);
+    text-align: center;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+}
+.ios-hint button {
+    margin-left: 0.6rem;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent-purple);
+    font-weight: bold;
+    text-decoration: underline;
+    cursor: pointer;
+}
