@@ -37,6 +37,9 @@ function toast(message, isError = false) {
 }
 
 function errorText(e) {
+  if (window.navigator.onLine === false || /failed to fetch|networkerror|load failed/i.test(e?.message || '')) {
+    return 'No internet connection. Try again when you are back online.';
+  }
   if (e?.code === '23505') return /email/i.test(e.message) ? 'That email is already registered.' : 'That entry already exists.';
   if (e?.code === '42501') return 'You do not have permission to do that. Sign in as an official and try again.';
   return e?.message || 'Something went wrong. Try again.';
@@ -640,6 +643,44 @@ function bindUI() {
   });
 }
 
+/* ---------- PWA: service worker, install button, offline banner ---------- */
+function setupPWA() {
+  if ('serviceWorker' in window.navigator && location.protocol !== 'file:') {
+    window.navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker not registered', err));
+  }
+
+  let installEvent = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installEvent = e;
+    $('#installBtn').hidden = false;
+  });
+  window.addEventListener('appinstalled', () => { $('#installBtn').hidden = true; });
+  $('#installBtn').addEventListener('click', async () => {
+    if (!installEvent) return;
+    installEvent.prompt();
+    await installEvent.userChoice;
+    installEvent = null;
+    $('#installBtn').hidden = true;
+  });
+
+  // iOS has no install prompt: show a one-time hint in Safari.
+  const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent || '');
+  const installed = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone;
+  let seen = false;
+  try { seen = !!localStorage.getItem('shg-ios-hint'); } catch { /* storage blocked */ }
+  $('#iosHint').hidden = !(isIos && !installed && !seen);
+  $('#iosHintClose').addEventListener('click', () => {
+    $('#iosHint').hidden = true;
+    try { localStorage.setItem('shg-ios-hint', '1'); } catch { /* storage blocked */ }
+  });
+
+  const syncOnline = () => { $('#offlineBanner').hidden = window.navigator.onLine !== false; };
+  window.addEventListener('online', () => { syncOnline(); refresh(); });
+  window.addEventListener('offline', syncOnline);
+  syncOnline();
+}
+
 function openClaim() {
   $('#claimError').textContent = '';
   $('#claimDialog').showModal();
@@ -648,6 +689,7 @@ function openClaim() {
 /* ---------- start ---------- */
 async function init() {
   bindUI();
+  setupPWA();
   try {
     db = await createDB();
   } catch (e) {
