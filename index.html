@@ -6,10 +6,26 @@
     <meta name="theme-color" content="#4A154B">
     <meta name="description" content="Ebenezer Self Help Group: merry-go-round, savings, low-interest loans and event support.">
     <title>Ebenezer Self Help Group</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Ebenezer SHG">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link href="vendor/fontawesome/css/all.min.css" rel="stylesheet">
     <link href="css/styles.css" rel="stylesheet">
 </head>
 <body>
+
+    <div class="offline-banner" id="offlineBanner" role="status" hidden>
+        You're offline. The app is available, but saving and loading records needs an internet connection.
+    </div>
+
+    <div class="ios-hint" id="iosHint" hidden>
+        To install: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.
+        <button type="button" id="iosHintClose" aria-label="Dismiss">Got it</button>
+    </div>
 
     <div class="demo-banner" id="demoBanner" hidden>
         Demo mode: data is saved in this browser only. Add your Supabase keys in <code>js/config.js</code> to share data across members.
@@ -19,24 +35,98 @@
         <div class="logo"><i class="fas fa-hand-holding-heart"></i> EBENEZER SHG</div>
         <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Menu"><i class="fas fa-bars"></i></button>
         <ul class="nav-links" id="navLinks">
-            <li><a href="#services">Services</a></li>
-            <li><a href="#register">Register</a></li>
-            <li><a href="#reports">Member Reports</a></li>
-            <li><button class="nav-btn" id="signInBtn" hidden>Officials sign in</button></li>
+            <li class="hide-for-member"><a href="#services">Services</a></li>
+            <li class="hide-for-member"><a href="#register">Register</a></li>
+            <li class="hide-for-member"><a href="#reports">Member Reports</a></li>
+            <li class="member-only"><a href="#myAccount">My account</a></li>
+            <li><button class="nav-btn" id="installBtn" hidden><i class="fas fa-download"></i> Install app</button></li>
+            <li><button class="nav-btn" id="signInBtn" hidden>Sign in</button></li>
             <li><button class="nav-btn" id="signOutBtn" hidden>Sign out</button></li>
         </ul>
     </nav>
 
+    <div class="link-banner" id="linkBanner" hidden>
+        You're signed in, but your account isn't linked to a membership yet.
+        <button type="button" id="openClaim">Enter membership code</button>
+        <small>Not registered yet? Use the registration form first and wait for an official to approve you. Officials: see supabase/make-official.sql.</small>
+    </div>
+
     <section class="hero">
         <h1>Ebenezer Self Help Group</h1>
         <div class="slogan">"Together We Rise"</div>
-        <p>Select any service below to open its module or manage your contributions.</p>
+        <p class="hide-for-member">Select any service below to open its module or manage your contributions.</p>
     </section>
 
     <div class="container">
 
-        <h2 class="section-title" id="services">Group Services (Click to Open)</h2>
-        <ul class="services-list">
+        <!-- Member dashboard (signed-in members) -->
+        <section id="myAccount" class="member-only">
+            <h2 class="section-title"><i class="fas fa-user-circle"></i> Welcome, <span id="myName"></span></h2>
+            <button type="button" class="action-btn secondary" id="myStatementBtn" style="width: auto;"><i class="fas fa-print"></i> My statement</button>
+
+            <div class="stat-cards">
+                <div class="stat-card"><span class="stat-value" id="mySavings"></span><span>My savings</span></div>
+                <div class="stat-card"><span class="stat-value" id="myGroupTotal"></span><span>Group savings</span></div>
+                <div class="stat-card" id="myMgrCard"><span class="stat-value" id="myPayout"></span><span>My merry-go-round payout</span></div>
+            </div>
+
+            <div class="member-grid">
+                <div class="panel-box" id="myMgrBox">
+                    <h3 class="section-title"><i class="fas fa-sync-alt"></i> Merry-Go-Round</h3>
+                    <p><strong>Today's recipient:</strong> <span id="myMgrToday"></span></p>
+                    <div class="table-scroll" id="myMgrTable"></div>
+                    <p style="margin-top: 1rem;"><strong>Unpaid days:</strong> <span id="myArrears"></span></p>
+                    <div class="table-scroll" id="myPayments"></div>
+                </div>
+
+                <div class="panel-box">
+                    <h3 class="section-title"><i class="fas fa-hand-holding-usd"></i> Request a Loan</h3>
+                    <form id="myLoanForm">
+                        <input type="number" name="amount" min="1" step="any" placeholder="Loan Amount (KES)" required>
+                        <select name="months">
+                            <option value="1">1 Month (10% Interest)</option>
+                            <option value="3">3 Months (10% Interest)</option>
+                            <option value="6">6 Months (10% Interest)</option>
+                        </select>
+                        <button type="submit" class="action-btn secondary">Calculate Repayment</button>
+                        <button type="button" class="action-btn" id="myLoanSend">Send loan request</button>
+                    </form>
+                    <div id="myCalcResult" style="margin-top: 1rem; font-weight: bold; color: var(--primary-purple);" aria-live="polite"></div>
+                </div>
+
+                <div class="panel-box">
+                    <h3 class="section-title"><i class="fas fa-heart"></i> Request Event Support</h3>
+                    <form id="myEventForm">
+                        <select name="kind" required>
+                            <option value="">Select Event Type</option>
+                            <option value="wedding">Wedding / Celebration</option>
+                            <option value="medical">Medical Emergency</option>
+                            <option value="bereavement">Bereavement Support</option>
+                        </select>
+                        <textarea name="description" placeholder="Describe the support required..." rows="3" required></textarea>
+                        <button type="submit" class="action-btn">Submit Request</button>
+                    </form>
+                </div>
+
+                <div class="panel-box">
+                    <h3 class="section-title"><i class="fas fa-piggy-bank"></i> My Deposits</h3>
+                    <div class="table-scroll" id="myDeposits"></div>
+                </div>
+
+                <div class="panel-box">
+                    <h3 class="section-title"><i class="fas fa-file-invoice-dollar"></i> My Loans</h3>
+                    <div class="table-scroll" id="myLoans"></div>
+                </div>
+
+                <div class="panel-box">
+                    <h3 class="section-title"><i class="fas fa-clipboard-list"></i> My Support Requests</h3>
+                    <div class="table-scroll" id="myEvents"></div>
+                </div>
+            </div>
+        </section>
+
+        <h2 class="section-title hide-for-member" id="services">Group Services (Click to Open)</h2>
+        <ul class="services-list hide-for-member">
             <li>
                 <button class="service-btn-card" data-panel="merryGoRoundPanel">
                     <div>
@@ -76,7 +166,7 @@
         </ul>
 
         <!-- Merry-go-round -->
-        <div id="merryGoRoundPanel" class="action-panel active">
+        <div id="merryGoRoundPanel" class="action-panel active hide-for-member">
             <h3 class="section-title"><i class="fas fa-sync-alt"></i> Daily Merry-Go-Round Schedule</h3>
             <p class="lock-note">Officials sign in to see the rotation. <button type="button" data-open-signin>Sign in</button></p>
             <div class="admin-only">
@@ -86,11 +176,18 @@
                     <p><strong>Tomorrow's Recipient:</strong> <span id="mgrTomorrow"></span></p>
                 </div>
                 <div class="table-scroll" id="mgrRotation"></div>
+
+                <h4 class="subhead"><i class="fas fa-coins"></i> Daily contributions</h4>
+                <div class="stat-row">
+                    <p><label for="mgrDate"><strong>Date:</strong></label> <input type="date" id="mgrDate" class="inline-input"></p>
+                    <p><strong>Collected:</strong> <span id="mgrCollected"></span></p>
+                </div>
+                <div class="table-scroll" id="mgrContrib"></div>
             </div>
         </div>
 
         <!-- Savings -->
-        <div id="savingsPanel" class="action-panel">
+        <div id="savingsPanel" class="action-panel hide-for-member">
             <h3 class="section-title"><i class="fas fa-piggy-bank"></i> Savings &amp; Growth Tracker</h3>
             <p>Regular contributions build up your borrowing power and annual dividends.</p>
             <p class="lock-note">Officials sign in to record deposits. <button type="button" data-open-signin>Sign in</button></p>
@@ -106,7 +203,7 @@
         </div>
 
         <!-- Loans -->
-        <div id="loansPanel" class="action-panel">
+        <div id="loansPanel" class="action-panel hide-for-member">
             <h3 class="section-title"><i class="fas fa-hand-holding-usd"></i> Loan Calculator (10% Interest Rate)</h3>
             <form id="loanForm" style="max-width: 400px;">
                 <select class="member-select admin-only" name="member" aria-label="Member"></select>
@@ -125,7 +222,7 @@
         </div>
 
         <!-- Event support -->
-        <div id="eventsPanel" class="action-panel">
+        <div id="eventsPanel" class="action-panel hide-for-member">
             <h3 class="section-title"><i class="fas fa-heart"></i> Event Support Claim</h3>
             <p class="lock-note">Officials sign in to record and review claims. <button type="button" data-open-signin>Sign in</button></p>
             <div class="admin-only">
@@ -145,7 +242,7 @@
         </div>
 
         <!-- Registration & reports -->
-        <div class="grid-two-col">
+        <div class="grid-two-col hide-for-member">
             <div class="panel-box" id="register">
                 <h2 class="section-title"><i class="fas fa-user-plus"></i> New Member Registration</h2>
                 <form id="regForm">
@@ -191,13 +288,49 @@
 
     <dialog id="signInDialog" aria-labelledby="signInTitle">
         <form id="signInForm" method="dialog">
-            <h3 id="signInTitle" style="color: var(--primary-purple);">Officials sign in</h3>
+            <h3 id="signInTitle" style="color: var(--primary-purple);">Sign in</h3>
+            <p class="dialog-help" id="authHelp" hidden>Members: create an account here, then enter the membership code an official gives you once you're approved.</p>
             <input type="email" name="email" placeholder="Email" autocomplete="username" required>
             <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
             <div class="form-error" id="signInError" role="alert"></div>
             <div class="dialog-actions">
                 <button type="button" class="action-btn secondary" id="signInCancel">Cancel</button>
-                <button type="submit" class="action-btn">Sign in</button>
+                <button type="submit" class="action-btn" id="authSubmit">Sign in</button>
+            </div>
+            <button type="button" class="link-btn" id="authToggle">New member? Create an account</button>
+        </form>
+    </dialog>
+
+    <dialog id="paymentDialog" aria-labelledby="paymentTitle">
+        <form id="paymentForm" method="dialog">
+            <h3 id="paymentTitle" style="color: var(--primary-purple);">Record loan payment</h3>
+            <p class="dialog-help" id="paymentInfo"></p>
+            <input type="number" name="amount" min="1" step="any" placeholder="Amount paid (KES)" required>
+            <input type="date" name="paid_on" required>
+            <div class="dialog-actions">
+                <button type="button" class="action-btn secondary" id="paymentCancel">Cancel</button>
+                <button type="submit" class="action-btn">Save payment</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="statementDialog" aria-labelledby="statementTitle">
+        <div id="statementBody"></div>
+        <div class="dialog-actions no-print">
+            <button type="button" class="action-btn secondary" id="statementClose">Close</button>
+            <button type="button" class="action-btn" id="statementPrint"><i class="fas fa-print"></i> Print / Save as PDF</button>
+        </div>
+    </dialog>
+
+    <dialog id="claimDialog" aria-labelledby="claimTitle">
+        <form id="claimForm" method="dialog">
+            <h3 id="claimTitle" style="color: var(--primary-purple);">Link your membership</h3>
+            <p class="dialog-help">Enter the membership code an official gave you after approving your registration.</p>
+            <input type="text" name="code" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" required>
+            <div class="form-error" id="claimError" role="alert"></div>
+            <div class="dialog-actions">
+                <button type="button" class="action-btn secondary" id="claimCancel">Later</button>
+                <button type="submit" class="action-btn">Link account</button>
             </div>
         </form>
     </dialog>
