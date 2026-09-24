@@ -1,8 +1,8 @@
-   [{
-     "relation": ["delegate_permission/common.handle_all_urls"],
-     "target": {
-       "namespace": "android_app",
-       "package_name": "app.netlify.ebenezershg.twa",
-       "sha256_cert_fingerprints": ["44:C6:63:3F:01:2F:01:44:B1:46:B9:99:13:5A:EF:0A:78:14:B8:B4:F9:0B:38:41:35:76:49:F3:8F:9F:7B:04"]
-     }
-   }]
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.netlify.ebenezershg.twa",
+        "sha256_cert_fingerprints": ["AA:42:2D:37:C6:92:CA:D5:20:58:F8:47:AC:AA:8A:57:59:ED:5B:D8:92:F2:78:63:1F:B0:AC:D0:EE:01:08:00"]
+      }
+    }]
