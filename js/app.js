@@ -650,7 +650,7 @@ function bindUI() {
     e.preventDefault();
     const form = e.currentTarget;
     guarded($('button[type=submit]', form), async () => {
-      await db.insert('mgr_payments', { member_id: state.profile.id, pay_date: todayStr(), amount: CONFIG.DAILY_RATE, mpesa_code: form.elements.mpesa_code.value.trim() || null });
+      await db.insert('mgr_payments', { member_id: state.profile.id, pay_date: todayStr(), amount: CONFIG.DAILY_RATE, mpesa_code: form.elements.mpesa_code.value.trim() || null, status: 'pending' });
       form.reset();
       toast('Sent. An official will confirm once it shows on the statement.');
       await refresh();
@@ -667,7 +667,7 @@ function bindUI() {
     if (amount === null) return;
     const code = window.prompt('M-Pesa code (optional):') || null;
     guarded(btn, async () => {
-      await db.insert('loan_payments', { loan_id: loan.id, amount: Number(amount), paid_on: todayStr(), mpesa_code: code });
+      await db.insert('loan_payments', { loan_id: loan.id, amount: Number(amount), paid_on: todayStr(), mpesa_code: code, status: 'pending' });
       toast('Sent. An official will confirm once it shows on the statement.');
       await refresh();
     });
@@ -681,7 +681,7 @@ function bindUI() {
     if (amount === null) return;
     const code = window.prompt('M-Pesa code (optional):') || null;
     guarded(btn, async () => {
-      await db.insert('event_contributions', { event_id: btn.dataset.support, member_id: state.profile.id, amount: Number(amount), mpesa_code: code });
+      await db.insert('event_contributions', { event_id: btn.dataset.support, member_id: state.profile.id, amount: Number(amount), mpesa_code: code, status: 'pending' });
       toast('Sent. An official will confirm once it shows on the statement.');
       await refresh();
     });
