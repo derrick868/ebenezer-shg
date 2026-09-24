@@ -11,7 +11,7 @@ not shared between devices.
 
 ## Go live with shared data (Supabase)
 1. Create a free project at supabase.com.
-2. SQL Editor: run `supabase/schema.sql`, then `supabase/migrate-v2.sql` (member logins and roles), then `supabase/migrate-v3.sql` (payment tracking).
+2. SQL Editor: run in order — `supabase/schema.sql`, `supabase/migrate-v2.sql` (logins/roles), `supabase/migrate-v3.sql` (payment tracking), `supabase/migrate-v4.sql` (payment claims, event contributions, notifications).
 3. Authentication > Sign In / Providers > Email: turn **on** "Allow new users to sign up" and turn **off** "Confirm email".
    Anyone can create an account, but an account sees nothing until it is linked to an approved member (see below).
 4. Create your own login: Authentication > Users > Add user (tick Auto Confirm). Then edit and run
@@ -45,6 +45,18 @@ Open the site with `?as=member` at the end of the address (for example `index.ht
 - Quick: app.netlify.com/drop, drag this folder in.
 - Better: push to GitHub, Netlify > Add new site > Import from Git. Leave build command empty, publish directory `.`.
   Every push then redeploys. Rename the site under Site configuration to get `your-name.netlify.app`.
+
+## Payment claims (manual M-Pesa, no Daraja account needed)
+Members pay by M-Pesa the normal way (Paybill/Till), then log it in the app; an official checks the statement and confirms.
+This needs no Safaricom developer account and upgrades cleanly to automatic M-Pesa (STK push) later, since the buttons stay the same.
+
+- **Merry-go-round:** member dashboard > **Send today's contribution**, with an optional M-Pesa code.
+- **Loan repayment:** member dashboard > My Loans > **Repay** on an active loan.
+- **Event support:** member dashboard > **Support a Member's Request** lists approved requests from other members; tap **Contribute**.
+- Officials: nav > **Confirmations** lists everything pending, each with **Confirm receipt** or **Reject**.
+- Confirming (or an official recording a payment directly, as before) sends the member an in-app notification, shown under the bell icon in the nav.
+  Notifications also fire on registration approval, loan approval/decline, and event request approval/decline.
+- Rejecting removes the claim so the member can resend it (e.g. if the code was mistyped).
 
 ## Installing as an app (PWA)
 The app installs on phones and desktops and opens offline. What's included:

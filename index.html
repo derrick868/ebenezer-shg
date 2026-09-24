@@ -39,7 +39,13 @@
             <li class="hide-for-member"><a href="#register">Register</a></li>
             <li class="hide-for-member"><a href="#reports">Member Reports</a></li>
             <li class="member-only"><a href="#myAccount">My account</a></li>
-
+            <li class="admin-only"><a href="#confirmations">Confirmations</a></li>
+            <li class="linked-only">
+                <button class="nav-btn bell-btn" id="bellBtn" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-bell"></i><span class="bell-dot" id="bellDot" hidden></span>
+                </button>
+                <div class="bell-panel" id="bellPanel" hidden></div>
+            </li>
             <li><button class="nav-btn" id="installBtn" hidden><i class="fas fa-download"></i> Install app</button></li>
             <li><button class="nav-btn" id="signInBtn" hidden>Sign in</button></li>
             <li><button class="nav-btn" id="signOutBtn" hidden>Sign out</button></li>
@@ -77,6 +83,10 @@
                     <p><strong>Today's recipient:</strong> <span id="myMgrToday"></span></p>
                     <div class="table-scroll" id="myMgrTable"></div>
                     <p style="margin-top: 1rem;"><strong>Unpaid days:</strong> <span id="myArrears"></span></p>
+                    <form id="mySendForm" class="inline-form">
+                        <input type="text" name="mpesa_code" placeholder="M-Pesa code (optional)" maxlength="20">
+                        <button type="submit" class="action-btn">Send today's contribution</button>
+                    </form>
                     <div class="table-scroll" id="myPayments"></div>
                 </div>
 
@@ -123,7 +133,19 @@
                     <h3 class="section-title"><i class="fas fa-clipboard-list"></i> My Support Requests</h3>
                     <div class="table-scroll" id="myEvents"></div>
                 </div>
+
+                <div class="panel-box" style="grid-column: 1 / -1;">
+                    <h3 class="section-title"><i class="fas fa-hands-helping"></i> Support a Member's Request</h3>
+                    <div class="table-scroll" id="openEvents"></div>
+                </div>
             </div>
+        </section>
+
+        <!-- Payment confirmations (officials) -->
+        <section id="confirmations" class="admin-only">
+            <h2 class="section-title"><i class="fas fa-check-double"></i> Payment Confirmations</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Members submit these after paying by M-Pesa. Check your Paybill/Till statement, then confirm or reject.</p>
+            <div class="table-scroll" id="claimsList"></div>
         </section>
 
         <h2 class="section-title hide-for-member" id="services">Group Services (Click to Open)</h2>

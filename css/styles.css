@@ -499,3 +499,32 @@ dialog#statementDialog {
     text-decoration: underline;
     cursor: pointer;
 }
+
+/* ---------- Notifications bell ---------- */
+body:not(.linking):not(.member):not(.official) .linked-only { display: none; }
+.bell-btn { position: relative; }
+.bell-dot { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background: #EF4444; border-radius: 50%; }
+.bell-panel {
+    position: absolute;
+    right: 1rem;
+    margin-top: 0.5rem;
+    width: min(90vw, 340px);
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--white);
+    color: var(--text-dark);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    z-index: 1500;
+}
+.bell-item { padding: 0.8rem 1rem; border-bottom: 1px solid #E5DEE8; font-size: 0.85rem; }
+.bell-item:last-child { border-bottom: none; }
+.bell-item.unread { background: var(--light-purple); }
+.bell-item strong { display: block; color: var(--primary-purple); margin-bottom: 0.15rem; }
+.bell-item time { display: block; color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; }
+.bell-empty { padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+
+/* ---------- Payment claims ---------- */
+.inline-form { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0; max-width: 420px; }
+.inline-form input { flex: 1; min-width: 140px; }
+.claim-type { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }

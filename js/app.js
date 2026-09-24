@@ -23,7 +23,7 @@ const EVENT_LABELS = { wedding: 'Wedding / Celebration', medical: 'Medical Emerg
 const STATUS_BADGE = { pending: 'badge-pending', active: 'badge-success', approved: 'badge-success', repaid: 'badge-muted', rejected: 'badge-danger', declined: 'badge-danger' };
 
 let db;
-const state = { profile: null, members: [], savings: [], loans: [], events: [], loanPayments: [], mgrPayments: [], rotation: [], groupTotal: null };
+const state = { profile: null, members: [], savings: [], loans: [], events: [], loanPayments: [], mgrPayments: [], eventContributions: [], notifications: [], openEvents: [], rotation: [], groupTotal: null };
 let promptedLink = false;
 
 let toastTimer;
@@ -88,7 +88,8 @@ async function refresh() {
   ['official', 'member', 'linking'].forEach((c) => document.body.classList.remove(c));
   $('#linkBanner').hidden = true;
   if (!signedIn) {
-    Object.assign(state, { profile: null, members: [], savings: [], loans: [], events: [], loanPayments: [], mgrPayments: [], rotation: [], groupTotal: null });
+    Object.assign(state, { profile: null, members: [], savings: [], loans: [], events: [], loanPayments: [], mgrPayments: [], eventContributions: [], notifications: [], openEvents: [], rotation: [], groupTotal: null });
+    renderBell();
     return;
   }
 
@@ -104,16 +105,17 @@ async function refresh() {
 
     const official = OFFICIAL_ROLES.includes(state.profile.role) && state.profile.status === 'active';
     document.body.classList.add(official ? 'official' : 'member');
+    state.notifications = await db.notificationsFor(state.profile.id);
 
     if (official) {
-      [state.members, state.savings, state.loans, state.events, state.loanPayments, state.mgrPayments] = await Promise.all(
-        ['members', 'savings', 'loans', 'event_requests', 'loan_payments', 'mgr_payments'].map((t) => db.list(t))
+      [state.members, state.savings, state.loans, state.events, state.loanPayments, state.mgrPayments, state.eventContributions] = await Promise.all(
+        ['members', 'savings', 'loans', 'event_requests', 'loan_payments', 'mgr_payments', 'event_contributions'].map((t) => db.list(t))
       );
     } else {
-      // Members only receive their own rows (enforced by the database) plus two safe summaries.
-      [state.savings, state.loans, state.events, state.loanPayments, state.mgrPayments, state.rotation, state.groupTotal] = await Promise.all([
-        db.list('savings'), db.list('loans'), db.list('event_requests'), db.list('loan_payments'), db.list('mgr_payments'),
-        db.rpc('rotation_members'), db.rpc('group_savings_total'),
+      // Members only receive their own rows (enforced by the database) plus a few safe summaries.
+      [state.savings, state.loans, state.events, state.loanPayments, state.mgrPayments, state.eventContributions, state.rotation, state.groupTotal, state.openEvents] = await Promise.all([
+        db.list('savings'), db.list('loans'), db.list('event_requests'), db.list('loan_payments'), db.list('mgr_payments'), db.list('event_contributions'),
+        db.rpc('rotation_members'), db.rpc('group_savings_total'), db.rpc('open_event_requests'),
       ]);
       state.members = [state.profile];
     }
@@ -126,6 +128,7 @@ async function refresh() {
 }
 
 function render() {
+  renderBell();
   if (document.body.classList.contains('official')) {
     renderMemberSelects();
     renderRotation();
@@ -134,12 +137,30 @@ function render() {
     renderLoans();
     renderEvents();
     renderReports();
+    renderClaims();
   } else {
     renderMember();
   }
 }
 
 /* ---------- rendering ---------- */
+function timeAgo(iso) {
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return fmtDay(iso);
+}
+
+function renderBell() {
+  const n = state.notifications;
+  $('#bellDot').hidden = !n.some((x) => !x.read);
+  $('#bellPanel').innerHTML = n.length
+    ? n.map((x) => `<div class="bell-item${x.read ? '' : ' unread'}" data-notif="${esc(x.id)}"><strong>${esc(x.title)}</strong>${esc(x.body)}<time>${timeAgo(x.created_at)}</time></div>`).join('')
+    : '<div class="bell-empty">No notifications yet.</div>';
+}
+
 function renderMemberSelects() {
   const options = '<option value="">Select member</option>' +
     activeMembers().map((m) => `<option value="${esc(m.id)}">${esc(m.full_name)}</option>`).join('');
@@ -246,17 +267,32 @@ function renderMember() {
   if (inRotation) {
     $('#myArrears').textContent = arrearsText(p);
     $('#myArrears').classList.toggle('owing', arrearsDays(p) > 0);
-    $('#myPayments').innerHTML = table(['Recent contributions', 'Amount'],
+    $('#myPayments').innerHTML = table(['Date', 'Amount', 'Status'],
       [...state.mgrPayments].sort((a, b) => b.pay_date.localeCompare(a.pay_date)).slice(0, 7)
-        .map((x) => `<tr><td>${fmtYmd(x.pay_date)}</td><td>${kes(x.amount)}</td></tr>`), 'No contributions recorded yet.');
+        .map((x) => `<tr><td>${fmtYmd(x.pay_date)}</td><td>${kes(x.amount)}</td><td>${x.status === 'pending' ? badge('pending', 'Awaiting confirmation') : badge('active', 'Confirmed')}</td></tr>`), 'No contributions recorded yet.');
   }
 
   $('#myDeposits').innerHTML = table(['Amount', 'Date'],
     state.savings.map((s) => `<tr><td>${kes(s.amount)}</td><td>${fmtDay(s.created_at)}</td></tr>`), 'No deposits recorded yet.');
-  $('#myLoans').innerHTML = table(['Amount', 'Payable', 'Balance', 'Status'],
-    state.loans.map((l) => `<tr><td>${kes(l.principal)}<br><small>${l.months} mo</small></td><td>${kes(l.total_payable)}</td><td>${l.status === 'active' ? kes(loanBalance(l)) : '-'}</td><td>${badge(l.status)}</td></tr>`), 'No loans yet.');
+  $('#myLoans').innerHTML = table(['Amount', 'Payable', 'Balance', 'Status', ''],
+    state.loans.map((l) => {
+      const pending = state.loanPayments.some((p) => p.loan_id === l.id && p.status === 'pending');
+      const action = l.status === 'active'
+        ? (pending ? '<span class="claim-type">Payment pending</span>' : `<button type="button" class="btn-sm" data-repay-loan="${esc(l.id)}">Repay</button>`)
+        : '';
+      return `<tr><td>${kes(l.principal)}<br><small>${l.months} mo</small></td><td>${kes(l.total_payable)}</td><td>${l.status === 'active' ? kes(loanBalance(l)) : '-'}</td><td>${badge(l.status)}</td><td>${action}</td></tr>`;
+    }), 'No loans yet.');
   $('#myEvents').innerHTML = table(['Request', 'Status'],
     state.events.map((ev) => `<tr><td>${esc(EVENT_LABELS[ev.kind] || ev.kind)}<br><small>${esc(ev.description)}</small></td><td>${badge(ev.status)}</td></tr>`), 'No support requests yet.');
+
+  const mine = new Set(state.events.map((ev) => ev.id));
+  $('#openEvents').innerHTML = table(['Member', 'Request', 'Raised', ''], state.openEvents.map((ev) => {
+    const pending = state.eventContributions.some((c) => c.event_id === ev.id && c.status === 'pending');
+    const action = mine.has(ev.id) ? '<small>Your request</small>'
+      : pending ? '<span class="claim-type">Sent, awaiting confirmation</span>'
+      : `<button type="button" class="btn-sm" data-support="${esc(ev.id)}">Contribute</button>`;
+    return `<tr><td>${esc(ev.requester_name)}</td><td>${esc(EVENT_LABELS[ev.kind] || ev.kind)}<br><small>${esc(ev.description)}</small></td><td>${kes(ev.raised)}</td><td>${action}</td></tr>`;
+  }), 'No open support requests right now.');
 }
 
 function renderSavings() {
@@ -286,6 +322,26 @@ function renderEvents() {
     return `<tr><td>${esc(memberName(ev.member_id))}</td><td>${esc(EVENT_LABELS[ev.kind] || ev.kind)}<br><small>${esc(ev.description)}</small></td><td>${badge(ev.status)}</td><td><div class="row-actions">${actions}</div></td></tr>`;
   });
   $('#eventsList').innerHTML = table(['Member', 'Request', 'Status', ''], rows, 'No support requests yet.');
+}
+
+function renderClaims() {
+  const rows = [];
+  state.mgrPayments.filter((p) => p.status === 'pending').forEach((p) => rows.push({
+    when: p.created_at, cells: `<td><span class="claim-type">Merry-go-round</span><br>${esc(memberName(p.member_id))}</td><td>${kes(p.amount)}<br><small>${fmtYmd(p.pay_date)}</small></td><td>${esc(p.mpesa_code || '-')}</td>`,
+    table: 'mgr_payments', id: p.id,
+  }));
+  state.loanPayments.filter((p) => p.status === 'pending').forEach((p) => rows.push({
+    when: p.created_at, cells: `<td><span class="claim-type">Loan repayment</span><br>${esc(memberName(p.member_id))}</td><td>${kes(p.amount)}<br><small>${fmtDay(p.paid_on)}</small></td><td>${esc(p.mpesa_code || '-')}</td>`,
+    table: 'loan_payments', id: p.id,
+  }));
+  state.eventContributions.filter((c) => c.status === 'pending').forEach((c) => rows.push({
+    when: c.created_at, cells: `<td><span class="claim-type">Event support</span><br>${esc(memberName(c.member_id))}</td><td>${kes(c.amount)}</td><td>${esc(c.mpesa_code || '-')}</td>`,
+    table: 'event_contributions', id: c.id,
+  }));
+  rows.sort((a, b) => a.when.localeCompare(b.when));
+  const body = rows.map((r) =>
+    `<tr>${r.cells}<td><div class="row-actions">${actionBtn(r.table, r.id, 'confirmed', 'Confirm receipt')}<button type="button" class="btn-sm danger" data-reject="${r.table}" data-id="${esc(r.id)}">Reject</button></div></td></tr>`);
+  $('#claimsList').innerHTML = table(['Claim', 'Amount', 'M-Pesa code', ''], body, 'No pending claims.');
 }
 
 function renderReports() {
@@ -567,6 +623,76 @@ function bindUI() {
       `Open ${location.origin}, tap Sign in, then "Create an account" using ${m.email}, and enter the code when asked.`;
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => toast('Invite message copied.'), () => window.prompt('Copy this message:', text));
     else window.prompt('Copy this message:', text);
+  });
+
+  // Notifications bell
+  $('#bellBtn').addEventListener('click', (e) => {
+    const open = $('#bellPanel').hidden;
+    $('#bellPanel').hidden = !open;
+    e.currentTarget.setAttribute('aria-expanded', String(open));
+    if (open && state.notifications.some((n) => !n.read)) {
+      guarded(null, async () => {
+        await Promise.all(state.notifications.filter((n) => !n.read).map((n) => db.update('notifications', n.id, { read: true })));
+        state.notifications.forEach((n) => { n.read = true; });
+        renderBell();
+      });
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#bellBtn') && !e.target.closest('#bellPanel')) { $('#bellPanel').hidden = true; $('#bellBtn').setAttribute('aria-expanded', 'false'); }
+  });
+
+  // Member: send today's merry-go-round contribution
+  $('#mySendForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    guarded($('button[type=submit]', form), async () => {
+      await db.insert('mgr_payments', { member_id: state.profile.id, pay_date: todayStr(), amount: CONFIG.DAILY_RATE, mpesa_code: form.elements.mpesa_code.value.trim() || null });
+      form.reset();
+      toast('Sent. An official will confirm once it shows on the statement.');
+      await refresh();
+    });
+  });
+
+  // Member: repay a loan
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-repay-loan]');
+    if (!btn) return;
+    const loan = state.loans.find((l) => l.id === btn.dataset.repayLoan);
+    if (!loan) return;
+    const amount = window.prompt(`Amount paid towards this loan (balance ${kes(loanBalance(loan))}):`);
+    if (amount === null) return;
+    const code = window.prompt('M-Pesa code (optional):') || null;
+    guarded(btn, async () => {
+      await db.insert('loan_payments', { loan_id: loan.id, amount: Number(amount), paid_on: todayStr(), mpesa_code: code });
+      toast('Sent. An official will confirm once it shows on the statement.');
+      await refresh();
+    });
+  });
+
+  // Member: contribute to another member's approved event request
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-support]');
+    if (!btn) return;
+    const amount = window.prompt('Amount to contribute (KES):');
+    if (amount === null) return;
+    const code = window.prompt('M-Pesa code (optional):') || null;
+    guarded(btn, async () => {
+      await db.insert('event_contributions', { event_id: btn.dataset.support, member_id: state.profile.id, amount: Number(amount), mpesa_code: code });
+      toast('Sent. An official will confirm once it shows on the statement.');
+      await refresh();
+    });
+  });
+
+  // Officials: confirm or reject a pending claim
+  document.addEventListener('click', (e) => {
+    const reject = e.target.closest('button[data-reject]');
+    if (!reject) return;
+    guarded(reject, async () => {
+      await db.remove(reject.dataset.reject, reject.dataset.id);
+      toast('Claim rejected.');
+      await refresh();
+    });
   });
 
   // Merry-go-round contributions (officials)

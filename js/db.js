@@ -7,10 +7,11 @@ import { CONFIG } from './config.js';
 //   list(table)          rows the current person is allowed to see
 //   insert(table,row), update(table,id,patch)
 //   rpc(name,args)       server-side functions (claim_member, rotation_members, group_savings_total)
-// Tables: members, savings, loans, event_requests, loan_payments, mgr_payments
+// Tables: members, savings, loans, event_requests, loan_payments, mgr_payments,
+// event_contributions, notifications
 
 const MGR_PLANS = ['Daily Merry-Go-Round', 'Full Membership'];
-const TABLES = ['members', 'savings', 'loans', 'event_requests', 'loan_payments', 'mgr_payments'];
+const TABLES = ['members', 'savings', 'loans', 'event_requests', 'loan_payments', 'mgr_payments', 'event_contributions', 'notifications'];
 
 /* ---------- Demo mode: localStorage ---------- */
 function localAdapter() {
@@ -33,7 +34,8 @@ function localAdapter() {
   };
   const me = () => load().members.find((m) => m.full_name === 'Jane Doe');
   const denied = () => { throw new Error('Not allowed for members'); };
-  const MEMBER_TABLES = ['loans', 'event_requests'];
+  const MEMBER_TABLES = ['loans', 'event_requests', 'loan_payments', 'mgr_payments', 'event_contributions'];
+  const notify = (data, mid, title, body) => data.notifications.push({ id: crypto.randomUUID(), member_id: mid, title, body, read: false, created_at: new Date().toISOString() });
   const paidOn = (data, loanId) => data.loan_payments.filter((p) => p.loan_id === loanId).reduce((t, p) => t + Number(p.amount), 0);
   // Mirrors the database triggers: a loan closes when fully paid and reopens if a payment is removed.
   const syncLoan = (data, loanId) => {
@@ -63,30 +65,73 @@ function localAdapter() {
       return rows.sort((a, b) => b.created_at.localeCompare(a.created_at));
     },
     async insert(table, row) {
-      if (asMember && table !== 'members' && !(MEMBER_TABLES.includes(table) && row.member_id === me().id)) denied();
+      const mine = asMember && MEMBER_TABLES.includes(table) && row.member_id === me().id;
+      if (asMember && table !== 'members' && !mine) denied();
+      const CLAIM_TABLES = ['loan_payments', 'mgr_payments', 'event_contributions'];
+      if (CLAIM_TABLES.includes(table)) row = { ...row, status: mine ? 'pending' : (row.status || 'confirmed') };
       const data = load();
       if (table === 'loan_payments') {
         const loan = data.loans.find((l) => l.id === row.loan_id);
         if (!loan) throw new Error('Loan not found');
         if (loan.status !== 'active') throw new Error('Only active loans can receive payments');
-        const balance = Number(loan.total_payable) - paidOn(data, loan.id);
-        if (row.amount > balance) throw new Error(`Payment is more than the balance (KES ${balance})`);
+        if ((row.status || 'confirmed') === 'confirmed') {
+          const balance = Number(loan.total_payable) - paidOn(data, loan.id);
+          if (row.amount > balance) throw new Error(`Payment is more than the balance (KES ${balance})`);
+        }
         row = { ...row, member_id: loan.member_id };
       }
       if (table === 'mgr_payments' && data.mgr_payments.some((p) => p.member_id === row.member_id && p.pay_date === row.pay_date)) {
         throw new Error('That entry already exists.');
       }
-      data[table].push({ id: crypto.randomUUID(), created_at: new Date().toISOString(), ...(defaults[table] || {}), ...row });
-      if (table === 'loan_payments') syncLoan(data, row.loan_id);
+      const record = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...(defaults[table] || {}), ...row };
+      data[table].push(record);
+      if (table === 'loan_payments' && record.status === 'confirmed') { syncLoan(data, row.loan_id); notify(data, record.member_id, 'Loan repayment confirmed', `Your repayment of KES ${record.amount} was confirmed.`); }
+      if (table === 'mgr_payments' && record.status === 'confirmed') notify(data, record.member_id, 'Contribution confirmed', `Your merry-go-round contribution of KES ${record.amount} for ${record.pay_date} was confirmed.`);
+      if (table === 'event_contributions' && record.status === 'confirmed') {
+        notify(data, record.member_id, 'Contribution confirmed', `Your contribution of KES ${record.amount} was confirmed. Thank you!`);
+        const ev = data.event_requests.find((e) => e.id === record.event_id);
+        if (ev) notify(data, ev.member_id, 'You received support', `Someone contributed KES ${record.amount} towards your event support request.`);
+      }
       save(data);
     },
     async update(table, id, patch) {
-      if (asMember) denied();
       const data = load();
       const record = data[table].find((r) => r.id === id);
+      if (asMember) {
+        // The only self-service update: a member marking their own notification read.
+        if (table === 'notifications' && record?.member_id === me().id && Object.keys(patch).every((k) => k === 'read')) {
+          Object.assign(record, patch);
+          save(data);
+          return;
+        }
+        denied();
+      }
       if (record) {
-        if (table === 'members' && patch.status === 'active' && !record.approved_at) record.approved_at = new Date().toISOString();
+        if (table === 'members') {
+          if (patch.status === 'active' && !record.approved_at) record.approved_at = new Date().toISOString();
+          if (patch.status === 'active' && record.status !== 'active') notify(data, record.id, 'Registration approved', "You're approved at Ebenezer SHG. Sign in and enter your membership code to link your account.");
+        }
+        if (table === 'loans' && patch.status && patch.status !== record.status) {
+          if (patch.status === 'active') notify(data, record.member_id, 'Loan approved', `Your loan of KES ${record.principal} was approved.`);
+          if (patch.status === 'rejected') notify(data, record.member_id, 'Loan declined', `Your loan request of KES ${record.principal} was declined.`);
+        }
+        if (table === 'event_requests' && patch.status && patch.status !== record.status) {
+          if (patch.status === 'approved') notify(data, record.member_id, 'Support request approved', 'Your event support request was approved. Other members can now contribute.');
+          if (patch.status === 'declined') notify(data, record.member_id, 'Support request declined', 'Your event support request was declined.');
+        }
+        if (table === 'loan_payments' && patch.status === 'confirmed' && record.status !== 'confirmed') {
+          notify(data, record.member_id, 'Loan repayment confirmed', `Your repayment of KES ${record.amount} was confirmed.`);
+        }
+        if (table === 'mgr_payments' && patch.status === 'confirmed' && record.status !== 'confirmed') {
+          notify(data, record.member_id, 'Contribution confirmed', `Your merry-go-round contribution of KES ${record.amount} for ${record.pay_date} was confirmed.`);
+        }
+        if (table === 'event_contributions' && patch.status === 'confirmed' && record.status !== 'confirmed') {
+          notify(data, record.member_id, 'Contribution confirmed', `Your contribution of KES ${record.amount} was confirmed. Thank you!`);
+          const ev = data.event_requests.find((e) => e.id === record.event_id);
+          if (ev) notify(data, ev.member_id, 'You received support', `Someone contributed KES ${record.amount} towards your event support request.`);
+        }
         Object.assign(record, patch);
+        if (table === 'loan_payments') syncLoan(data, record.loan_id);
       }
       save(data);
     },
@@ -98,6 +143,9 @@ function localAdapter() {
       if (table === 'loan_payments' && record) syncLoan(data, record.loan_id);
       save(data);
     },
+    async notificationsFor(memberId) {
+      return load().notifications.filter((n) => n.member_id === memberId).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    },
     async rpc(name) {
       const data = load();
       if (name === 'rotation_members') {
@@ -106,6 +154,14 @@ function localAdapter() {
           .map(({ id, full_name, plan, created_at }) => ({ id, full_name, plan, created_at }));
       }
       if (name === 'group_savings_total') return data.savings.reduce((t, s) => t + Number(s.amount), 0);
+      if (name === 'open_event_requests') {
+        return data.event_requests.filter((r) => r.status === 'approved').map((r) => ({
+          id: r.id,
+          requester_name: data.members.find((m) => m.id === r.member_id)?.full_name || 'A member',
+          kind: r.kind, description: r.description, created_at: r.created_at,
+          raised: data.event_contributions.filter((c) => c.event_id === r.id && c.status === 'confirmed').reduce((t, c) => t + Number(c.amount), 0),
+        }));
+      }
       throw new Error('Not available in demo mode');
     },
   };
@@ -147,6 +203,8 @@ function seed() {
     loan_payments: [{ id: crypto.randomUUID(), loan_id: loan.id, member_id: john.id, amount: 4000, paid_on: dateStr(2), created_at: daysAgo(2) }],
     // Yesterday and the day before: Jane and John paid; Mary missed the day before.
     mgr_payments: [contribution(jane, 1), contribution(john, 1), contribution(mary, 1), contribution(jane, 2), contribution(john, 2)],
+    event_contributions: [],
+    notifications: [],
   };
 }
 
@@ -197,6 +255,7 @@ async function supabaseAdapter() {
     async insert(table, row) { check(await sb.from(table).insert(row)); },
     async update(table, id, patch) { check(await sb.from(table).update(patch).eq('id', id)); },
     async remove(table, id) { check(await sb.from(table).delete().eq('id', id)); },
+    async notificationsFor(memberId) { return check(await sb.from('notifications').select('*').eq('member_id', memberId).order('created_at', { ascending: false })); },
     async rpc(name, args) { return check(await sb.rpc(name, args)); },
   };
 }
