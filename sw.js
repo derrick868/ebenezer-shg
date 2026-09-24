@@ -5,7 +5,7 @@
 //   Member and financial data is therefore never kept by the service worker.
 // Bump CACHE_VERSION whenever the SHELL list changes.
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE = `shg-shell-${CACHE_VERSION}`;
 const NETWORK_TIMEOUT_MS = 4000;
 
