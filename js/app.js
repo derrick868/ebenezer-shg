@@ -155,7 +155,10 @@ function timeAgo(iso) {
 
 function renderBell() {
   const n = state.notifications;
-  $('#bellDot').hidden = !n.some((x) => !x.read);
+  const unread = n.filter((x) => !x.read).length;
+  const dot = $('#bellDot');
+  dot.hidden = unread === 0;
+  dot.textContent = unread > 9 ? '9+' : String(unread);
   $('#bellPanel').innerHTML = n.length
     ? n.map((x) => `<div class="bell-item${x.read ? '' : ' unread'}" data-notif="${esc(x.id)}"><strong>${esc(x.title)}</strong>${esc(x.body)}<time>${timeAgo(x.created_at)}</time></div>`).join('')
     : '<div class="bell-empty">No notifications yet.</div>';

@@ -503,7 +503,21 @@ dialog#statementDialog {
 /* ---------- Notifications bell ---------- */
 body:not(.linking):not(.member):not(.official) .linked-only { display: none; }
 .bell-btn { position: relative; }
-.bell-dot { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background: #EF4444; border-radius: 50%; }
+.bell-dot {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: #EF4444;
+    color: var(--white);
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    line-height: 18px;
+    text-align: center;
+}
 .bell-panel {
     position: absolute;
     right: 1rem;

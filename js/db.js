@@ -34,8 +34,12 @@ function localAdapter() {
   };
   const me = () => load().members.find((m) => m.full_name === 'Jane Doe');
   const denied = () => { throw new Error('Not allowed for members'); };
+  const memberNameIn = (data, id) => data.members.find((m) => m.id === id)?.full_name || 'A member';
   const MEMBER_TABLES = ['loans', 'event_requests', 'loan_payments', 'mgr_payments', 'event_contributions'];
   const notify = (data, mid, title, body) => data.notifications.push({ id: crypto.randomUUID(), member_id: mid, title, body, read: false, created_at: new Date().toISOString() });
+  const notifyOfficials = (data, title, body) => data.members
+    .filter((m) => m.status === 'active' && ['chair', 'treasurer', 'secretary'].includes(m.role))
+    .forEach((o) => notify(data, o.id, title, body));
   const paidOn = (data, loanId) => data.loan_payments.filter((p) => p.loan_id === loanId).reduce((t, p) => t + Number(p.amount), 0);
   // Mirrors the database triggers: a loan closes when fully paid and reopens if a payment is removed.
   const syncLoan = (data, loanId) => {
@@ -85,6 +89,12 @@ function localAdapter() {
       }
       const record = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...(defaults[table] || {}), ...row };
       data[table].push(record);
+      if (table === 'members') notifyOfficials(data, 'New registration', `${record.full_name} registered and is awaiting approval.`);
+      if (table === 'loans' && record.status === 'pending') notifyOfficials(data, 'New loan request', `${memberNameIn(data, record.member_id)} requested a loan of KES ${record.principal}.`);
+      if (table === 'event_requests') notifyOfficials(data, 'New support request', `${memberNameIn(data, record.member_id)} requested event support.`);
+      if (['mgr_payments', 'loan_payments', 'event_contributions'].includes(table) && record.status === 'pending') {
+        notifyOfficials(data, 'Payment claim submitted', `${memberNameIn(data, record.member_id)} submitted a payment of KES ${record.amount} to confirm.`);
+      }
       if (table === 'loan_payments' && record.status === 'confirmed') { syncLoan(data, row.loan_id); notify(data, record.member_id, 'Loan repayment confirmed', `Your repayment of KES ${record.amount} was confirmed.`); }
       if (table === 'mgr_payments' && record.status === 'confirmed') notify(data, record.member_id, 'Contribution confirmed', `Your merry-go-round contribution of KES ${record.amount} for ${record.pay_date} was confirmed.`);
       if (table === 'event_contributions' && record.status === 'confirmed') {

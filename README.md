@@ -11,7 +11,7 @@ not shared between devices.
 
 ## Go live with shared data (Supabase)
 1. Create a free project at supabase.com.
-2. SQL Editor: run in order — `supabase/schema.sql`, `supabase/migrate-v2.sql` (logins/roles), `supabase/migrate-v3.sql` (payment tracking), `supabase/migrate-v4.sql` (payment claims, event contributions, notifications).
+2. SQL Editor: run in order — `supabase/schema.sql`, `supabase/migrate-v2.sql` (logins/roles), `supabase/migrate-v3.sql` (payment tracking), `supabase/migrate-v4.sql` (payment claims, event contributions, notifications), `supabase/migrate-v5.sql` (notify officials of new items).
 3. Authentication > Sign In / Providers > Email: turn **on** "Allow new users to sign up" and turn **off** "Confirm email".
    Anyone can create an account, but an account sees nothing until it is linked to an approved member (see below).
 4. Create your own login: Authentication > Users > Add user (tick Auto Confirm). Then edit and run
